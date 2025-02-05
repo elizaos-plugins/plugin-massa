@@ -3966,7 +3966,7 @@ function isTransferContent(content) {
   }
   const recipient = content.recipient;
   if (recipient && !recipient.endsWith(".massa")) {
-    Address.fromString(content.recipient);
+    Address.fromString(recipient);
   }
   return true;
 }
@@ -4015,10 +4015,11 @@ var transfer_default = {
   description: "MUST use this action if the user requests send a token or transfer a token, the request might be varied, but it will always be a token transfer.",
   handler: async (runtime, message, state, _options, callback) => {
     elizaLogger.log("Starting SEND_TOKEN handler...");
+    let currentState;
     if (!state) {
-      state = await runtime.composeState(message);
+      currentState = await runtime.composeState(message);
     } else {
-      state = await runtime.updateRecentMessageState(state);
+      currentState = await runtime.updateRecentMessageState(state);
     }
     const secretKey = runtime.getSetting("MASSA_PRIVATE_KEY");
     if (!secretKey) {
@@ -4032,7 +4033,7 @@ var transfer_default = {
     const provider = Web3Provider.fromRPCUrl(rpc, account);
     const { chainId } = await provider.networkInfos();
     const transferContext = composeContext({
-      state,
+      state: currentState,
       template: transferTemplate(
         chainId === CHAIN_ID.Mainnet ? MAINNET_TOKENS : BUILDNET_TOKENS
       )
@@ -4060,13 +4061,14 @@ var transfer_default = {
         recipientAddress = await getMnsTarget(provider, content.recipient.substring(0, content.recipient.length - ".massa".length));
         Address.fromString(recipientAddress);
       } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
         elizaLogger.error(
           "Error resolving MNS target:",
-          error?.message
+          errorMessage
         );
         if (callback) {
           callback({
-            text: `Error resolving MNS target: ${error?.message}`,
+            text: `Error resolving MNS target: ${errorMessage}`,
             content: { error }
           });
         }
@@ -4091,7 +4093,8 @@ var transfer_default = {
       );
       await operation.waitSpeculativeExecution();
       elizaLogger.success(
-        "Transfer completed successfully! Operation id: " + operation.id
+        `Successfully transferred ${content.amount} tokens to ${content.recipient}
+OperationId: ${operation.id}`
       );
       if (callback) {
         callback({
@@ -4108,10 +4111,10 @@ var transfer_default = {
       }
       return true;
     } catch (error) {
-      elizaLogger.error("Error during token transfer:", error?.message);
+      elizaLogger.error("Error during token transfer:", error);
       if (callback) {
         callback({
-          text: `Error transferring tokens: ${error?.message}`,
+          text: `Error transferring tokens: ${error instanceof Error ? error.message : String(error)}`,
           content: { error }
         });
       }
